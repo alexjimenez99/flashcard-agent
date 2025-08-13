@@ -1,0 +1,7 @@
+docker buildx build --platform linux/amd64 -t flashcard-agent:latest .
+docker tag flashcard-agent:latest 757754207110.dkr.ecr.us-east-1.amazonaws.com/flashcard-agent:latest
+docker push 757754207110.dkr.ecr.us-east-1.amazonaws.com/flashcard-agent:latest
+aws lambda update-function-code \
+  --function-name flashcard-agent \
+  --image-uri 757754207110.dkr.ecr.us-east-1.amazonaws.com/flashcard-agent:latest \
+  --region us-east-1

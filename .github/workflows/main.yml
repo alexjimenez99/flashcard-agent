@@ -1,0 +1,133 @@
+# .github/workflows/ci.yml
+
+name: Build and Push Docker Image
+
+on:
+  push:
+    branches: [main]
+
+env:                               # Global variables (all jobs & steps)
+  AWS_REGION: us-east-1
+  FUNCTION_NAME: flashcard-agent
+  REPO: flashcard-agent
+  IMAGE_TAG: latest
+  ROLE_NAME: flashcard-agent-role-el1ryor9
+  MEMORY_MB: 2048
+  TIMEOUT_SEC: 900
+  ARCH: x86_64
+  ACCOUNT_ID: 757754207110
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Log in to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build and tag Docker image
+        run: |
+          IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:$IMAGE_TAG"
+          LOCAL_TAG="$REPO:$IMAGE_TAG"
+          docker buildx build --platform linux/amd64 -t "$LOCAL_TAG" .
+          docker tag "$LOCAL_TAG" "$IMAGE_URI"
+
+      - name: Push image to ECR
+        run: |
+          IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:$IMAGE_TAG"
+          docker push "$IMAGE_URI"
+
+      # - name: Update Lambda Function
+      #   run: |
+      #     IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:$IMAGE_TAG"
+      #     aws lambda update-function-code \
+      #     --function-name "$FUNCTION_NAME" \
+      #     --image-uri "$IMAGE_URI" \
+      #     --region "$AWS_REGION"
+
+
+      - name: Ensure Lambda execution role exists
+        id: role
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          ROLE_NAME="${ROLE_NAME:-lambda-docling-exec}"
+          ROLE_ARN="arn:aws:iam::$ACCOUNT_ID:role/$ROLE_NAME"
+
+          if aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+            echo "Role $ROLE_NAME already exists."
+          else
+            echo "Creating role $ROLE_NAME..."
+            aws iam create-role \
+              --role-name "$ROLE_NAME" \
+              --assume-role-policy-document '{
+                "Version": "2012-10-17",
+                "Statement": [{
+                  "Effect": "Allow",
+                  "Principal": { "Service": "lambda.amazonaws.com" },
+                  "Action": "sts:AssumeRole"
+                }]
+              }' >/dev/null
+
+            # Attach the basic execution policy
+            aws iam attach-role-policy \
+              --role-name "$ROLE_NAME" \
+              --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole >/dev/null
+
+
+            # Wait a few seconds for the role to propagate
+            sleep 10
+          fi
+
+          echo "role_arn=$ROLE_ARN" >> $GITHUB_OUTPUT
+        env:
+          ROLE_NAME: ${{ env.ROLE_NAME }}
+
+      - name: Create or Update Lambda
+        run: |
+          IMAGE_URI="$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com/$REPO:$IMAGE_TAG"
+          if aws lambda get-function --function-name "$FUNCTION_NAME" --region "$AWS_REGION" >/dev/null 2>&1; then
+            echo "Updating existing Lambda..."
+            aws lambda update-function-code \
+              --function-name "$FUNCTION_NAME" \
+              --image-uri "$IMAGE_URI" \
+              --region "$AWS_REGION"
+          else
+            echo "Creating new Lambda..."
+            aws lambda create-function \
+              --function-name "$FUNCTION_NAME" \
+              --package-type Image \
+              --code ImageUri="$IMAGE_URI" \
+              --role "$ROLE_ARN" \
+              --architectures "$ARCH" \
+              --memory-size "$MEMORY_MB" \
+              --timeout "$TIMEOUT_SEC" \
+              --region "$AWS_REGION"
+          fi
+
+
+      - name: Update Lambda Environment variables
+        run: |
+          ENV_JSON='{
+            "DOCLING_OCR_ENGINE": "rapidocr",
+            "DOCLING_DO_OCR": "true",
+            "DOCLING_CHUNK": "true",
+            "DOCLING_TOKENIZER_NAME": "Qwen/Qwen2.5-4B",
+            "DOCLING_CHUNK_MAX_TOKENS": "800",
+            "DOCLING_CHUNK_MERGE_PEERS": "true",
+            "DOCLING_MAX_PAGES": "2147483647",
+            "DOCLING_MAX_FILE_SIZE": "2147483647",
+            "OUTPUT_LOCAL_DIR": "/tmp/out"
+          }'
+          aws lambda update-function-configuration \
+            --function-name "$FUNCTION_NAME" \
+            --environment "Variables=$ENV_JSON"
+
