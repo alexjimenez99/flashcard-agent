@@ -114,20 +114,3 @@ jobs:
           fi
 
 
-      - name: Update Lambda Environment variables
-        run: |
-          ENV_JSON='{
-            "DOCLING_OCR_ENGINE": "rapidocr",
-            "DOCLING_DO_OCR": "true",
-            "DOCLING_CHUNK": "true",
-            "DOCLING_TOKENIZER_NAME": "Qwen/Qwen2.5-4B",
-            "DOCLING_CHUNK_MAX_TOKENS": "800",
-            "DOCLING_CHUNK_MERGE_PEERS": "true",
-            "DOCLING_MAX_PAGES": "2147483647",
-            "DOCLING_MAX_FILE_SIZE": "2147483647",
-            "OUTPUT_LOCAL_DIR": "/tmp/out"
-          }'
-          aws lambda update-function-configuration \
-            --function-name "$FUNCTION_NAME" \
-            --environment "Variables=$ENV_JSON"
-

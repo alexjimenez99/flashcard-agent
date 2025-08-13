@@ -10,7 +10,6 @@ from hashlib import sha256
 
 
 from supabase import create_client, Client
-from llama_parse import LlamaParse
 from datetime import datetime
 from openai import OpenAI
 
