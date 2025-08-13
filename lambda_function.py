@@ -424,7 +424,7 @@ def lambda_function(event, context):
 
         # If no action provided on multipart, default to generate (backward compatibility)
         elif action == 'generate':
-            input_text = binary_to_text(input_text)
+            input_text = extract_text_from_binary(input_text)
 
 
     elif content_type.startswith("application/json"):
