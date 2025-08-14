@@ -19,7 +19,7 @@ ALLOW_REMOTE = os.getenv("ALLOW_REMOTE_ARTIFACTS", "false").lower() in ("true")
 # -----------------------------------------------------------------------------
 # Public helpers you can call from your backend (DO NOT modify your Lambda entry)
 # -----------------------------------------------------------------------------
-def extract_text_from_binary(data: Union[bytes, bytearray, memoryview], *, filename: str = "document") -> str:
+def extract_text_from_binary(data: Union[bytes, bytearray, memoryview], filename: str = "document") -> str:
     """
     Sends in-memory file bytes to the parser Lambda and returns extracted text.
 
@@ -77,7 +77,7 @@ def extract_text_from_binary(data: Union[bytes, bytearray, memoryview], *, filen
     raise RuntimeError(msg)
 
 
-def extract_manifest_from_binary(data: Union[bytes, bytearray, memoryview], *, filename: str = "document") -> Dict[str, Any]:
+def extract_manifest_from_binary(data: Union[bytes, bytearray, memoryview], filename: str = "document") -> Dict[str, Any]:
     """
     Same as above but returns the full manifest dict:
       { "documents": [ { input_name, artifacts{markdown/json/text/chunks}, status, ... } ] }
