@@ -1,5 +1,6 @@
 import os
 import json
+import gzip
 import base64
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -173,6 +174,7 @@ def _invoke_parser_lambda(function_name: str, region_name: Optional[str], event:
     Your handler returns: {"statusCode":200,"body":"{\"documents\":[...]}"}.
     """
     try:
+        print('event', event)
         client = boto3.client("lambda", region_name=region_name)
         resp = client.invoke(
             FunctionName=function_name,
