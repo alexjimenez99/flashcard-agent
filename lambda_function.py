@@ -398,21 +398,22 @@ def lambda_function(event, context):
         # Keep your existing text extraction
         input_text, deck_id = _extract_input_text(fields)
 
+        file_field = fields.get("file")
+
+        filename = file_field.get("filename")
+        content  = file_field.get("content") or b""
+        declared = file_field.get("type")
+
         # 👉 NEW: short-circuit for metadata
         if action == "metadata":
-            file_field = fields.get("file")
             if not isinstance(file_field, dict):
                 return {
                     "statusCode": 400,
                     "headers": _cors_headers(origin),
                     "body": json.dumps({"error": "Missing 'file' for metadata"}),
                 }
-
-            filename = file_field.get("filename")
-            content  = file_field.get("content") or b""
-            declared = file_field.get("type")
+            
             ftype    = _guess_file_type(filename, declared, content)
-
             page_count = _count_pdf_pages_fast(content) if ftype == "application/pdf" else None
 
             return {
@@ -424,7 +425,7 @@ def lambda_function(event, context):
 
         # If no action provided on multipart, default to generate (backward compatibility)
         elif action == 'generate':
-            input_text = extract_text_from_binary(input_text)
+            input_text = extract_text_from_binary(input_text, filename)
 
 
     elif content_type.startswith("application/json"):

@@ -174,7 +174,6 @@ def _invoke_parser_lambda(function_name: str, region_name: Optional[str], event:
     Your handler returns: {"statusCode":200,"body":"{\"documents\":[...]}"}.
     """
     try:
-        print('event', event)
         client = boto3.client("lambda", region_name=region_name)
         resp = client.invoke(
             FunctionName=function_name,
