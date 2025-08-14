@@ -145,8 +145,6 @@ class QAReviewPayload(BaseModel):
 
 
 
-
-
 # ---------- Make all your models strict ----------
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")  # no unknown keys anywhere
