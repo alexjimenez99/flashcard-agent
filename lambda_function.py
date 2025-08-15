@@ -139,38 +139,42 @@ def _ensure_list(obj, key: str) -> list:
 def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Traverse data['outline'] recursively and collect flashcard candidates.
-    Extracts front, back, and options directly if present in the candidate.
-    Returns a list of dicts with section/subsection context.
+    Extracts front, back, and options (or maps notes -> options) with section/subsection context.
     """
     results: List[Dict[str, Any]] = []
 
     def walk(node: Dict[str, Any], path: List[str]) -> None:
         title = node.get("title")
-        if title:
-            path = [*path, title]
+        if title is not None:
+            path = [*path, str(title)]
 
-        # Collect candidates at this node
+        # Candidates at this node
         for cand in node.get("flashcard_candidates", []):
             if isinstance(cand, dict):
-                front = cand.get("front", "")
-                back = cand.get("back", "")
-                options = cand.get("notes", {})
+                front = cand.get("front", "") or ""
+                back = cand.get("back", "") or ""
+                notes = cand.get("notes", "") or ""
+
             else:
-                # If it's not a dict, treat it as front text only
                 front = str(cand)
                 back = ""
-                options = {}
+                notes = {}
+
+            # Context: top-level section + immediate parent (if deeper)
+            section_title = path[0] if path else None
+            subsection_title = path[-1] if len(path) > 1 else None
+            if subsection_title == section_title:
+                subsection_title = None
 
             results.append({
-                "section_title": path[0] if path else None,
-                "subsection_title": path[1] if len(path) > 1 else None,
-                "section_path": " > ".join(path),
+                "section_title": section_title,
+                "subsection_title": subsection_title,
                 "front": front,
                 "back": back,
-                "notes": options,
+                "notes": notes,
             })
 
-        # Recurse into subsections
+        # Recurse
         for child in node.get("subsections", []):
             if isinstance(child, dict):
                 walk(child, path)
