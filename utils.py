@@ -41,9 +41,6 @@ def extract_text_from_binary(data: Union[bytes, bytearray, memoryview], filename
     if not docs:
         raise RuntimeError("Parser Lambda returned no documents.")
     
-    # Extract the One Document Sent from Front End
-    docs = docs[0]
-    
 
     artifacts: Dict[str, Any] = docs[0].get("artifacts") or {}
 
