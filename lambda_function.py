@@ -164,7 +164,7 @@ async def _run_pipeline(
 
     content_instructor = ContentInstructionAgent(
         api_key=gpt_api_key,
-        user_id=user_id,
+        uuid=user_id,
         jwt_token=jwt_token,
         model=model
     )
