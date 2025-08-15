@@ -204,23 +204,9 @@ async def _run_pipeline(
     )
 
     # 1) Run chunking + instruction steps concurrently
-    chunk_out, instructions = await asyncio.gather(
-            chunker.run(
-                user_id=user_id,
-                jwt_token=jwt_token,
-                system_role_id=6,
-                supabase_client=supabase,
-                message=input_text,
-            ),
-            content_instructor.run(
-                user_id=user_id,
-                jwt_token=jwt_token,
-                system_role_id=9,
-                supabase_client=supabase,
-                message=input_text,
-            ),
-    )
+    chunk_out, instructions = await asyncio.gather(chunk_out, instructions)
 
+    print('instructions', instructions)
     # Expect either dict with "chunks" or raw text; guard:
     chunks = (chunk_out or {}).get("chunks") if isinstance(chunk_out, dict) else None
 
