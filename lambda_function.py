@@ -135,54 +135,73 @@ def _ensure_list(obj, key: str) -> list:
     v = obj.get(key, [])
     return v if isinstance(v, list) else []
 
-
 def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Traverse data['outline'] recursively and collect flashcard candidates.
-    Extracts front, back, and options (or maps notes -> options) with section/subsection context.
+    Each result contains: section_title, subsection_title, front, back, notes, context.
+    Robust to flashcard_candidates being a dict, list, or string, and to
+    individual candidates being dicts or strings.
     """
     results: List[Dict[str, Any]] = []
 
+    def norm_candidates(raw) -> List[Any]:
+        """Normalize flashcard_candidates to a list of items (dicts or strings)."""
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return raw
+        # if a single dict -> wrap
+        if isinstance(raw, dict):
+            return [raw]
+        # if a string -> treat as single candidate string
+        return [str(raw)]
+
+    def as_card_fields(cand: Any) -> Dict[str, Any]:
+        """Return a unified card dict (front/back/notes/context) from cand."""
+        if isinstance(cand, dict):
+            # Only pull the fields you care about; default to ""
+            return {
+                "front": cand.get("front", "") or "",
+                "back": cand.get("back", "") or "",
+                "notes": cand.get("notes", "") or "",
+                "context": cand.get("context", "") or "",
+            }
+        # cand is a string -> treat as front-only
+        text = str(cand)
+        return {"front": text, "back": "", "notes": "", "context": ""}
+
     def walk(node: Dict[str, Any], path: List[str]) -> None:
         title = node.get("title")
-        if title is not None:
+        if title:
+            # create a new list so parent path isn't mutated
             path = [*path, str(title)]
 
-        # Candidates at this node
-        for cand in node.get("flashcard_candidates", []):
-            if isinstance(cand, dict):
-                front = cand.get("front", "") or ""
-                back = cand.get("back", "") or ""
-                notes = cand.get("notes", "") or ""
-                context = cand.get('context', '') or ""
-
-            else:
-                front = str(cand)
-                back = ""
-                notes = ""
-                context = ""
-
-            # Context: top-level section + immediate parent (if deeper)
-            section_title = path[0] if path else None
-            subsection_title = path[-1] if len(path) > 1 else None
-            if subsection_title == section_title:
-                subsection_title = None
-
+        # Collect candidates at this node
+        for cand in norm_candidates(node.get("flashcard_candidates")):
+            card = as_card_fields(cand)
             results.append({
-                "section_title": section_title,
-                "subsection_title": subsection_title,
-                "context": context,
-                "front": front,
-                "back": back,
-                "notes": notes,
+                "section_title": path[0] if len(path) >= 1 else None,
+                "subsection_title": path[1] if len(path) >= 2 else None,
+                "front": card["front"],
+                "back": card["back"],
+                "notes": card["notes"],
+                "context": card["context"],
             })
 
-        # Recurse
-        for child in node.get("subsections", []):
-            if isinstance(child, dict):
-                walk(child, path)
+        # Recurse into subsections (robust to bad shapes)
+        subsections = node.get("subsections", [])
+        if isinstance(subsections, dict):
+            # Sometimes models output a single dict instead of a list
+            subsections = [subsections]
+        if isinstance(subsections, list):
+            for child in subsections:
+                if isinstance(child, dict):
+                    walk(child, path)
 
-    for section in data.get("outline", []):
+    outline = data.get("outline", [])
+    if isinstance(outline, dict):
+        outline = [outline]
+    for section in outline:
         if isinstance(section, dict):
             walk(section, [])
 
