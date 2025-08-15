@@ -265,24 +265,49 @@ Your tasks:
 
 5. Do NOT generate flashcards—your role is only to analyze and prepare the content brief.
 
-Output format:
-Theme: <one sentence theme>
-
-Major Components:
-- <component 1>
-- <component 2>
-- ...
-
-Outline:
-1. <Section>
-   1.1 <Subsection / detail>
-       - Flashcard candidate: <note>
-   1.2 <Subsection / detail>
-2. <Section>
-   ...
-
-Special Notes for Flashcard Agent:
-- <any special instructions or caveats>
+{
+  "theme": "<one sentence theme>",
+  "major_components": [
+    "<component 1>",
+    "<component 2>",
+    "..."
+  ],
+  "outline": [
+    {
+      "title": "<Section>",
+      "subsections": [
+        {
+          "title": "<Subsection / detail>",
+          "flashcard_candidates": [
+            {
+              "front": "<flashcard_detail>",                // REQUIRED
+              "back": "<flashcard_detail>",                 // REQUIRED
+              "notes": "<flashcard_detail>"                 // optional extra verbosity/context/example no longer than 2 sentences
+            }
+          ],
+          "subsections": []
+        },
+        {
+          "title": "<Subsection / detail>",
+          "flashcard_candidates": [
+		        {
+              "front": "<flashcard_detail>",                // REQUIRED
+              "back": "<flashcard_detail>",                 // REQUIRED
+              "notes": "<flashcard_detail>"                 // optional extra verbosity/context/example no longer than 2 sentences
+            }
+		      ],
+          "subsections": []
+        }
+      ]
+    },
+    {
+      "title": "<Section>",
+      "subsections": []
+    }
+  ],
+  "special_notes_for_flashcard_agent": [
+    "<any special instructions or caveats>"
+  ]
 
 Important:
 - Preserve relevant context that could help the flashcard agent generate accurate and comprehensive cards.

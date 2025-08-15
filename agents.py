@@ -408,10 +408,14 @@ class ContentInstructionAgent(OpenAIAgent):
 
         try:
             full_text = _extract_output_text(resp)
+
+            # Try to parse JSON (chunker should return JSON)
+            parsed = _extract_json_from_text(full_text) or {}
             await self.log_automated_suggestions(
                 message=full_text, user_id=user_id, system_role_id=system_role_id, tokens = output_tokens
             )
-            return full_text
+            # Prefer returning parsed JSON when available
+            return parsed if parsed else full_text
 
         except Exception as e:
             print(f"Error handling response: {e}")

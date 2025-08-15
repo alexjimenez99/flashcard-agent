@@ -135,6 +135,45 @@ def _ensure_list(obj, key: str) -> list:
     v = obj.get(key, [])
     return v if isinstance(v, list) else []
 
+
+def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Traverse data['outline'] recursively and collect flashcard candidates.
+    Supports candidates as strings or objects (uses 'prompt' or 'note' if present).
+    Returns a list of dicts with section/subsection context.
+    """
+    results: List[Dict[str, Any]] = []
+
+    def walk(node: Dict[str, Any], path: List[str]) -> None:
+        title = node.get("title")
+        if title:
+            path = [*path, title]
+
+        # Collect candidates at this node (if any)
+        for cand in node.get("flashcard_candidates", []):
+            if isinstance(cand, dict):
+                text = cand.get("prompt") or cand.get("note") or json.dumps(cand, ensure_ascii=False)
+            else:
+                text = str(cand)
+
+            results.append({
+                "section_title": path[0] if path else None,
+                "subsection_title": path[1] if len(path) > 1 else None,
+                "section_path": " > ".join(path),
+                "flashcard_candidate": text,
+            })
+
+        # Recurse into subsections
+        for child in node.get("subsections", []):
+            if isinstance(child, dict):
+                walk(child, path)
+
+    for section in data.get("outline", []):
+        if isinstance(section, dict):
+            walk(section, [])
+
+    return results
+
 # ---- Pipeline ----
 
 async def _run_pipeline(
@@ -146,6 +185,7 @@ async def _run_pipeline(
     user_id: str,
     jwt_token: str,
     deck_id: Optional[str],
+    test_mode = True,
 ) -> Dict[str, Any]:
     """
     Runs ChunkSplitter → Generator → QA. If QA rejects too many, loop back once to Generator.
@@ -154,14 +194,6 @@ async def _run_pipeline(
 
     # Initialize agents
     
-    chunker = ChunkSplitterAgent(
-        system_prompt="chunk_splitting_agent",
-        api_key=gpt_api_key,
-        uuid=user_id,
-        jwt_token=jwt_token,
-        model=model,
-    )
-
     content_instructor = ContentInstructionAgent(
         api_key=gpt_api_key,
         uuid=user_id,
@@ -169,164 +201,21 @@ async def _run_pipeline(
         model=model
     )
 
-    
-    generator = FlashcardGeneratorAgent(
-        system_prompt="flashcard_generator_agent",
-        api_key=gpt_api_key,
-        uuid=user_id,
-        jwt_token=jwt_token,
-        model=model,
-    )
-    
-    qa = FlashcardQualityAgent(
-        system_prompt="flashcard_quality_agent",
-        api_key=gpt_api_key,
-        uuid=user_id,
-        jwt_token=jwt_token,
-        model=model,
-    )
-
-    # 1) Chunk splitting
-    chunk_out = chunker.run(
-        user_id=user_id,
-        jwt_token=jwt_token,
-        system_role_id=6,
-        supabase_client=supabase,
-        message=input_text,
-    )
-
-    instructions = content_instructor.run(
-        user_id=user_id,
-        jwt_token=jwt_token,
-        system_role_id=9,
-        supabase_client=supabase,
-        message=input_text
-    )
-
-    # 1) Run chunking + instruction steps concurrently
-    chunk_out, instructions = await asyncio.gather(chunk_out, instructions)
-
-    print('instructions', instructions)
-    # Expect either dict with "chunks" or raw text; guard:
-    chunks = (chunk_out or {}).get("chunks") if isinstance(chunk_out, dict) else None
-
-    if not chunks:
-        # Fallback: single chunk covering the whole text
-        chunks = [{
-            "index": 0,
-            "title": None,
-            "heading_level": None,
-            "language": "und",
-            "span": {"start": 0, "end": len(input_text)},
-            "text": input_text
-        }]
-
     print('candiate cards')
-    # 2) Generation across chunks → collect all candidate cards
-    candidate_cards: List[Dict[str, Any]] = []
-    for ch in chunks:
-        ch_text = ch.get("text", "")
-        # You may pass chunk metadata in the message as JSON:
-        gen_message = json.dumps({
-            "chunk_index": ch.get("index", 0),
-            "chunk_span": ch.get("span", {"start": 0, "end": len(input_text)}),
-            "text": ch_text,
-            "content_instructions": instructions
-        })
-
-        gen_out = await generator.run(
-            user_id=user_id,
-            jwt_token=jwt_token,
-            system_role_id=7,
-            supabase_client=supabase,
-            message=gen_message,
-        )
-
-        print('gen out', gen_out)
-        # Generator returns a dict per batch in our implementation; if you stream batches,
-        # you’d loop here. For now assume a single dict with "cards" or a list of batches.
-        if isinstance(gen_out, dict) and "cards" in gen_out:
-            candidate_cards.extend(_ensure_list(gen_out, "cards"))
-        elif isinstance(gen_out, list):  # list of batches
-            for batch in gen_out:
-                candidate_cards.extend(_ensure_list(batch, "cards"))
-
-    # 3) QA/Dedupe
-    qa_payload = {
-        "source_text": input_text,
-        "cards": candidate_cards
-    }
-
-
-
-    qa_out = await qa.run(
-        user_id=user_id,
-        jwt_token=jwt_token,
-        system_role_id=8,
-        supabase_client=supabase,
-        message=json.dumps(qa_payload),
-    )
-
-    print('qa out', qa_out)
-
-    accepted_cards = []
-    rejected_count = 0
-    if isinstance(qa_out, dict): 
-        accepted_cards = _ensure_list(qa_out, "accepted")
-        summary        = qa_out.get("summary") or {}
-        rejected_count = int(summary.get("rejected_count", 0))
-
+    flashcards = await content_instructor.run(
+                            user_id=user_id,
+                            jwt_token=jwt_token,
+                            system_role_id=9,
+                            supabase_client=supabase,
+                            message=input_text
+                        )
     
-    print('acccepted', accepted_cards)
-    # 4) Conditional loop back to generator once if QA says it needs work
-    # Criterion: if more than 30% rejected, try one refinement pass.
-    if candidate_cards and rejected_count / max(1, len(candidate_cards)) > 0.3:
-        # Provide QA feedback to generator as context
-        feedback = {
-            "instruction": "Regenerate/improve cards addressing QA feedback. Avoid duplicates; ensure traceability to spans.",
-            "qa_summary": qa_out.get("summary", {}),
-            "examples_of_issues": _ensure_list(qa_out, "rejected")[:5],  # sample a few issues
-        }
-
-        improved_candidates: List[Dict[str, Any]] = []
-        for ch in chunks:
-            gen_message = json.dumps({
-                "chunk_index": ch.get("index", 0),
-                "chunk_span": ch.get("span", {"start": 0, "end": len(input_text)}),
-                "text": ch.get("text", ""),
-                "feedback": feedback
-            })
-            gen_out2 = await generator.run(
-                user_id=user_id,
-                jwt_token=jwt_token,
-                system_role_id=7,
-                supabase_client=supabase,
-                message=gen_message,
-            )
-            if isinstance(gen_out2, dict) and "cards" in gen_out2:
-                improved_candidates.extend(_ensure_list(gen_out2, "cards"))
-            elif isinstance(gen_out2, list):
-                for batch in gen_out2:
-                    improved_candidates.extend(_ensure_list(batch, "cards"))
-
-        qa_payload2 = {
-            "source_char_len": len(input_text),
-            "cards": improved_candidates
-        }
-        qa_out2 = await qa.run(
-            user_id=user_id,
-            jwt_token=jwt_token,
-            system_role_id=8,
-            supabase_client=supabase,
-            message=json.dumps(qa_payload2),
-        )
-        if isinstance(qa_out2, dict):
-            accepted_cards = _ensure_list(qa_out2, "accepted")
-
+    print('flashcards', flashcards)
+    
     # Create Text Encoded Hash
     source_hash = sha256(input_text.encode("utf-8")).hexdigest()
 
-    # Try to reuse an identical source for this user (optional)
+    # # Try to reuse an identical source for this user (optional)
     existing = supabase.table("flashcard_sources").select("id").eq("user_id", user_id).eq("hash", source_hash).limit(1).execute()
     if existing.data:
         source_id = existing.data[0]["id"]
@@ -357,25 +246,22 @@ async def _run_pipeline(
 
     # Prepare batch insert for 'cards' table (align to your schema)
     rows = []
-    print('qa', qa_out)
-    print('card type', type(accepted_cards))
-    print('cards', accepted_cards)
 
-    for c in accepted_cards:
+    for c in _extract_flashcards(flashcards):
         rows.append({
-            "user_id": user_id, 
+            "user_id": user_id,
             "deck_id": deck_id,
-            "type": c.get("type", "basic"),
-            "front": c.get("front", ""),
-            "back": c.get("back", ""),
-            "hint": c.get("hint"),
-            "tags": c.get("tags", []),
-            "difficulty": c.get("difficulty", 2),
+            "section_title": c["section_title"],
+            "subsection_title": c["subsection_title"],
+            "section_path": c["section_path"],
+            "front": c["flashcard_candidates"]['front'],
+            "back": c["flashcard_candidates"]['back'],
+            "notes": c["flashcard_candidates"]['notes'],
             "source_id": source_id,
-            "source_span": c.get("source_span"),
-            "extras": c.get("extras", {}),
+            # add other fields you keep (e.g., tags) if your JSON includes them
         })
-    inserted = []
+
+
     if rows:
         ins = supabase.table("flashcards").insert(rows).execute()
         inserted = ins.data or []
@@ -383,7 +269,7 @@ async def _run_pipeline(
     return {
         "deck_id": deck_id,
         "inserted_count": len(inserted),
-        "accepted_preview": accepted_cards[:10],  # preview for frontend
+        "accepted_preview": rows,  # preview for frontend
     }
 
 
