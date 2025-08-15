@@ -9,7 +9,7 @@ from supabase import Client
 from typing import Any, Dict, Optional, Union, List
 
 
-from prompts import FLASHCARD_CHUNKER, FLASHCARD_GENERATOR, FLASHCARD_QA
+from prompts import FLASHCARD_CHUNKER, FLASHCARD_GENERATOR, FLASHCARD_QA, CONTENT_INSTRUCTIONS
 # from pydantic_formatting import ChunkPayload, CardsPayload, QAReviewPayload, coerce_and_validate
 
 
@@ -349,6 +349,69 @@ class ChunkSplitterAgent(OpenAIAgent):
             )
             # Prefer returning parsed JSON when available
             return parsed if parsed else full_text
+
+        except Exception as e:
+            print(f"Error handling response: {e}")
+            print(f"Full response object: {resp}")
+            return {}
+        
+
+class ContentInstructionAgent(OpenAIAgent):
+    def __init__(
+        self,
+        api_key: str,
+        uuid: str,
+        jwt_token: str,
+        model: str = "gpt-5-mini",
+    ):
+        self.agent_instructions = self.get_system_prompt()
+        self.client = OpenAI(api_key=api_key)
+        self.model = model
+        self.uuid = uuid
+        self.jwt_token = jwt_token
+        self.prompt: Optional[str] = None
+
+    def get_system_prompt(self) -> Dict[str, Optional[str]]:
+        return {"prompt": CONTENT_INSTRUCTIONS, "schema": None}
+
+    async def pull_user_questionaires(self, user_id: str):
+        return
+
+    async def run(
+        self,
+        user_id: str,
+        jwt_token: str,
+        system_role_id: int,
+        supabase_client: "Client",
+        message: Optional[str] = None,
+        university_information: str = "",
+    ) -> Union[dict, str]:
+        self.supabase_client = supabase_client
+
+        instructions = self.agent_instructions["prompt"]
+
+        api_params = {
+            "model": self.model,
+            "instructions": instructions,
+            "input": message or "",
+            "stream": False,
+        }
+
+        resp = self.client.responses.create(**api_params)
+
+        input_tokens     = resp.usage.input_tokens
+        output_tokens    = resp.usage.output_tokens
+
+        await self.log_automated_suggestions(
+                message=message, user_id=user_id, system_role_id=system_role_id, tokens = input_tokens
+            )
+
+        try:
+            full_text = _extract_output_text(resp)
+            await self.log_automated_suggestions(
+                message=full_text, user_id=user_id, system_role_id=system_role_id, tokens = output_tokens
+            )
+            return full_text
 
         except Exception as e:
             print(f"Error handling response: {e}")

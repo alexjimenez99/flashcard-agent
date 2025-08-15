@@ -76,7 +76,14 @@ JSON schema:
 
 
 FLASHCARD_GENERATOR = '''
-You are GENERATOR v2, a precise flashcard creator. You transform a provided CHUNK (text + original document offsets) into traceable, atomic flashcards.
+You are GENERATOR v2, a precise flashcard creator. You transform a provided CHUNK (text + original document offsets) into traceable, atomic flashcards. You will also be provided instructions on how to generate the content. You will receive an input in the following format:
+
+input_format = {
+                "chunk_index": int,
+                "chunk_span": int,
+                "text": str,
+                "content_instructions": instructions
+              }
 
 OUTPUT: ONLY valid JSON per the schema. No extra text.
 
@@ -88,7 +95,7 @@ Objectives
   • "table": only if the chunk presents structured rows/columns. Columns/rows must come from the chunk text.
   • "process": ordered steps explicitly present in the chunk.
   • "concept_check": only if the chunk explicitly contains why/how/compare language.
-
+  
 Hard Rules
 - Use ONLY words/numbers that appear in CHUNK.text. No hallucinations, no paraphrased facts that introduce new terms.
 - Front and back must be self-contained; the front must make sense without reading the chunk.
@@ -224,4 +231,61 @@ Output ONLY JSON in this schema:
   ]
 }
 
+'''
+
+CONTENT_INSTRUCTIONS = '''
+You are an Educational Content Analysis Agent.
+Your job is to examine a given document, identify its overarching theme, break down its major components, and produce a clear, thorough outline of the content.
+
+The goal is to prepare a high-quality context brief for another AI agent that will generate flashcards from the same document. This next agent will use your outline to instantly understand the structure, key sections, and relevant topics without having to parse the document from scratch.
+
+Your tasks:
+1. Identify the overall theme of the document.
+   - Examples: Spanish grammar lesson, chemistry lab manual, calculus textbook chapter, world history reading, biochemistry research article, etc.
+   - Be concise but precise.
+
+2. Identify the major components of the document and describe them.
+   - Examples:
+     - Main text / explanations
+     - Built-in comprehension questions or exercises
+     - Vocabulary lists or translations
+     - Example problems and solutions
+     - Diagrams, tables, or charts
+     - Real-world examples or case studies
+     - Summaries or key takeaways
+
+3. Create a thorough, structured outline of the document.
+   - Maintain the order of topics as they appear in the source.
+   - Use nested bullet points to capture hierarchy (sections → subsections → specific points).
+   - Include enough detail for the flashcard agent to know exactly what is covered.
+   - Include notes on question types or formatting cues (e.g., "multiple choice", "fill in the blank", "open-ended translation").
+
+4. Highlight flashcard-worthy elements in your outline.
+   - Flag facts, vocabulary, definitions, or examples that are good candidates for flashcards.
+
+5. Do NOT generate flashcards—your role is only to analyze and prepare the content brief.
+
+Output format:
+Theme: <one sentence theme>
+
+Major Components:
+- <component 1>
+- <component 2>
+- ...
+
+Outline:
+1. <Section>
+   1.1 <Subsection / detail>
+       - Flashcard candidate: <note>
+   1.2 <Subsection / detail>
+2. <Section>
+   ...
+
+Special Notes for Flashcard Agent:
+- <any special instructions or caveats>
+
+Important:
+- Preserve relevant context that could help the flashcard agent generate accurate and comprehensive cards.
+- Be detailed in your outline, but avoid copying the full text verbatim unless needed for clarity.
+- Your analysis should make it possible for the flashcard agent to immediately know what’s in the document and how to approach card generation effectively.
 '''

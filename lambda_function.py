@@ -14,7 +14,7 @@ from datetime import datetime
 from openai import OpenAI
 
 # --- import your agents (from your module) ---
-from agents import ChunkSplitterAgent, FlashcardGeneratorAgent, FlashcardQualityAgent
+from agents import ChunkSplitterAgent, FlashcardGeneratorAgent, FlashcardQualityAgent, ContentInstructionAgent
 from utils import extract_manifest_from_binary, extract_text_from_binary
 
 
@@ -162,6 +162,13 @@ async def _run_pipeline(
         model=model,
     )
 
+    content_instructor = ContentInstructionAgent(
+        api_key=gpt_api_key,
+        user_id=user_id,
+        jwt_token=jwt_token,
+        model=model
+    )
+
     
     generator = FlashcardGeneratorAgent(
         system_prompt="flashcard_generator_agent",
@@ -179,16 +186,40 @@ async def _run_pipeline(
         model=model,
     )
 
-    print('initialized all gents')
     # 1) Chunk splitting
-    chunk_out = await chunker.run(
+    chunk_out = chunker.run(
         user_id=user_id,
         jwt_token=jwt_token,
         system_role_id=6,
         supabase_client=supabase,
         message=input_text,
     )
-    print('chunk out', chunk_out)
+
+    instructions = content_instructor.run(
+        user_id=user_id,
+        jwt_token=jwt_token,
+        system_role_id=9,
+        supabase_client=supabase,
+        message=input_text
+    )
+
+    # 1) Run chunking + instruction steps concurrently
+    chunk_out, instructions = await asyncio.gather(
+            chunker.run(
+                user_id=user_id,
+                jwt_token=jwt_token,
+                system_role_id=6,
+                supabase_client=supabase,
+                message=input_text,
+            ),
+            content_instructor.run(
+                user_id=user_id,
+                jwt_token=jwt_token,
+                system_role_id=9,
+                supabase_client=supabase,
+                message=input_text,
+            ),
+    )
 
     # Expect either dict with "chunks" or raw text; guard:
     chunks = (chunk_out or {}).get("chunks") if isinstance(chunk_out, dict) else None
@@ -213,7 +244,8 @@ async def _run_pipeline(
         gen_message = json.dumps({
             "chunk_index": ch.get("index", 0),
             "chunk_span": ch.get("span", {"start": 0, "end": len(input_text)}),
-            "text": ch_text
+            "text": ch_text,
+            "content_instructions": instructions
         })
 
         gen_out = await generator.run(
