@@ -531,17 +531,17 @@ def lambda_function(event, context):
 
     # ── Main flow ───────────────────────────────────────────────────────────────
     try:
-        # result = asyncio.run(
-        #     _run_pipeline(
-        #         input_text=input_text,
-        #         supabase=supabase_user,   # run DB ops under user's RLS
-        #         gpt_api_key=gpt_api_key,
-        #         model=model,
-        #         user_id=user_id,
-        #         jwt_token=access_token,   # pass through for downstream auditing if needed
-        #         deck_id=deck_id,
-        #     )
-        # )
+        result = asyncio.run(
+            _run_pipeline(
+                input_text=input_text,
+                supabase=supabase_user,   # run DB ops under user's RLS
+                gpt_api_key=gpt_api_key,
+                model=model,
+                user_id=user_id,
+                jwt_token=access_token,   # pass through for downstream auditing if needed
+                deck_id=deck_id,
+            )
+        )
 
         return {
             "statusCode": 200,

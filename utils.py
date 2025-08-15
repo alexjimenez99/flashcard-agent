@@ -37,44 +37,54 @@ def extract_text_from_binary(data: Union[bytes, bytearray, memoryview], filename
     manifest = extract_manifest_from_binary(data, filename=filename)
     docs = manifest.get("documents") or []
 
-    print("extracted_docs", docs)
+    
     if not docs:
         raise RuntimeError("Parser Lambda returned no documents.")
+    
+    # Extract the One Document Sent from Front End
+    docs = docs[0]
+    
 
     artifacts: Dict[str, Any] = docs[0].get("artifacts") or {}
 
+    markdown_text = artifacts['markdown']
+    json_text = artifacts['json']
+    plain_text = artifacts['text']
+
+    return markdown_text
+
     # 1) Inline-first (no network)
-    inline = _read_inline_artifact(artifacts)
-    if inline is not None and inline.strip():
-        return inline
+    # inline = _read_inline_artifact(artifacts)
+    # if inline is not None and inline.strip():
+    #     return inline
 
-    # 2) Remote (opt-in)
-    if ALLOW_REMOTE:
-        for key in ("markdown", "text"):
-            uri = artifacts.get(key)
-            if isinstance(uri, str) and uri:
-                content = _read_artifact(uri)
-                if content is not None and content.strip():
-                    return content
+    # # 2) Remote (opt-in)
+    # if ALLOW_REMOTE:
+    #     for key in ("markdown", "text"):
+    #         uri = artifacts.get(key)
+    #         if isinstance(uri, str) and uri:
+    #             content = _read_artifact(uri)
+    #             if content is not None and content.strip():
+    #                 return content
 
-    # 3) Local path fallback (best-effort; often not shared across Lambdas)
-    for key in ("markdown", "text"):
-        p = artifacts.get(key)
-        if isinstance(p, str):
-            try:
-                path = Path(p)
-                if path.exists() and path.is_file():
-                    return path.read_text(encoding="utf-8", errors="replace")
-            except Exception:
-                pass
+    # # 3) Local path fallback (best-effort; often not shared across Lambdas)
+    # for key in ("markdown", "text"):
+    #     p = artifacts.get(key)
+    #     if isinstance(p, str):
+    #         try:
+    #             path = Path(p)
+    #             if path.exists() and path.is_file():
+    #                 return path.read_text(encoding="utf-8", errors="replace")
+    #         except Exception:
+    #             pass
 
     # Nothing accessible
-    msg = (
-        "No accessible artifacts were returned.\n"
-        "- Ensure your parser Lambda includes inline content (e.g., artifacts.inline_markdown or artifacts.inline_text), "
-        "OR set ALLOW_REMOTE_ARTIFACTS=1 to enable remote fetches of http(s)/s3 URIs."
-    )
-    raise RuntimeError(msg)
+    # msg = (
+    #     "No accessible artifacts were returned.\n"
+    #     "- Ensure your parser Lambda includes inline content (e.g., artifacts.inline_markdown or artifacts.inline_text), "
+    #     "OR set ALLOW_REMOTE_ARTIFACTS=1 to enable remote fetches of http(s)/s3 URIs."
+    # )
+    # raise RuntimeError(msg)
 
 
 def extract_manifest_from_binary(data: Union[bytes, bytearray, memoryview], filename: str = "document") -> Dict[str, Any]:
