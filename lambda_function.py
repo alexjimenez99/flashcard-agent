@@ -154,11 +154,13 @@ def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
                 front = cand.get("front", "") or ""
                 back = cand.get("back", "") or ""
                 notes = cand.get("notes", "") or ""
+                context = cand.get('context', '') or ""
 
             else:
                 front = str(cand)
                 back = ""
-                notes = {}
+                notes = ""
+                context = ""
 
             # Context: top-level section + immediate parent (if deeper)
             section_title = path[0] if path else None
@@ -169,6 +171,7 @@ def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
             results.append({
                 "section_title": section_title,
                 "subsection_title": subsection_title,
+                "context": context,
                 "front": front,
                 "back": back,
                 "notes": notes,
@@ -264,6 +267,7 @@ async def _run_pipeline(
             "deck_id": deck_id,
             "section_title": c["section_title"],
             "subsection_title": c["subsection_title"],
+            "context": c['context'],
             "front": c['front'],
             "back": c['back'],
             "notes": c['notes'],

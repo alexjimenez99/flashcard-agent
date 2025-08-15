@@ -282,7 +282,8 @@ Your tasks:
             {
               "front": "<flashcard_detail>",                // REQUIRED
               "back": "<flashcard_detail>",                 // REQUIRED
-              "notes": "<flashcard_detail>"                 // optional extra verbosity/context/example no longer than 2 sentences
+              "context":<flashcard_detail>",                //  Optional: brief context to clarify the flashcard front (e.g., who/what a pronoun refers to, scene summary, or source/source citation) — use short quotes or passage references when needed.
+              "notes": "<flashcard_detail>"                 // Optional: additional notes giving examples, usage tips, or brief explanations to support the flashcard content.
             }
           ],
           "subsections": []
