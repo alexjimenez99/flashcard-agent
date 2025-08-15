@@ -139,7 +139,7 @@ def _ensure_list(obj, key: str) -> list:
 def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Traverse data['outline'] recursively and collect flashcard candidates.
-    Supports candidates as strings or objects (uses 'prompt' or 'note' if present).
+    Extracts front, back, and options directly if present in the candidate.
     Returns a list of dicts with section/subsection context.
     """
     results: List[Dict[str, Any]] = []
@@ -149,18 +149,25 @@ def _extract_flashcards(data: Dict[str, Any]) -> List[Dict[str, Any]]:
         if title:
             path = [*path, title]
 
-        # Collect candidates at this node (if any)
+        # Collect candidates at this node
         for cand in node.get("flashcard_candidates", []):
             if isinstance(cand, dict):
-                text = cand.get("prompt") or cand.get("note") or json.dumps(cand, ensure_ascii=False)
+                front = cand.get("front", "")
+                back = cand.get("back", "")
+                options = cand.get("notes", {})
             else:
-                text = str(cand)
+                # If it's not a dict, treat it as front text only
+                front = str(cand)
+                back = ""
+                options = {}
 
             results.append({
                 "section_title": path[0] if path else None,
                 "subsection_title": path[1] if len(path) > 1 else None,
                 "section_path": " > ".join(path),
-                "flashcard_candidate": text,
+                "front": front,
+                "back": back,
+                "notes": options,
             })
 
         # Recurse into subsections
@@ -254,9 +261,9 @@ async def _run_pipeline(
             "section_title": c["section_title"],
             "subsection_title": c["subsection_title"],
             "section_path": c["section_path"],
-            "front": c["flashcard_candidates"]['front'],
-            "back": c["flashcard_candidates"]['back'],
-            "notes": c["flashcard_candidates"]['notes'],
+            "front": c['front'],
+            "back": c['back'],
+            "notes": c['notes'],
             "source_id": source_id,
             # add other fields you keep (e.g., tags) if your JSON includes them
         })
