@@ -264,7 +264,6 @@ async def _run_pipeline(
             "deck_id": deck_id,
             "section_title": c["section_title"],
             "subsection_title": c["subsection_title"],
-            "section_path": c["section_path"],
             "front": c['front'],
             "back": c['back'],
             "notes": c['notes'],
